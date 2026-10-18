@@ -1,0 +1,330 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  Building2,
+  CheckCircle2,
+  Circle,
+  Save,
+} from "lucide-react";
+
+import {
+  getCompanyPrepByIdApi,
+  toggleCompanyTaskApi,
+  updateCompanyPrepApi,
+} from "../api/company.api";
+
+import AppLayout from "../components/AppLayout";
+import ErrorState from "../components/ErrorState";
+import LoadingState from "../components/LoadingState";
+import PageHeader from "../components/PageHeader";
+import SectionCard from "../components/SectionCard";
+
+const CompanyDetails = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [company, setCompany] = useState(null);
+
+  const [editData, setEditData] = useState({
+    priority: "medium",
+    applicationStatus: "not_applied",
+    notes: "",
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [togglingTaskId, setTogglingTaskId] = useState("");
+  const [error, setError] = useState("");
+
+  const fetchCompany = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await getCompanyPrepByIdApi(id);
+
+      setCompany(response.data);
+
+      setEditData({
+        priority: response.data.priority || "medium",
+        applicationStatus: response.data.applicationStatus || "not_applied",
+        notes: response.data.notes || "",
+      });
+    } catch (error) {
+      setError(error.response?.data?.message || "Failed to fetch company");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCompany();
+  }, [id]);
+
+  const handleEditChange = (e) => {
+    setEditData({
+      ...editData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+
+      const response = await updateCompanyPrepApi(id, editData);
+
+      setCompany(response.data);
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update company");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleTask = async (taskId) => {
+    try {
+      setTogglingTaskId(taskId);
+
+      const response = await toggleCompanyTaskApi(id, taskId);
+
+      setCompany(response.data);
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update task");
+    } finally {
+      setTogglingTaskId("");
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <LoadingState
+          title="Loading company preparation"
+          message="Please wait while we fetch company-specific preparation details."
+        />
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <ErrorState
+          title="Company not found"
+          message={error}
+          buttonText="Back to Companies"
+          onRetry={() => navigate("/companies")}
+        />
+      </AppLayout>
+    );
+  }
+
+  if (!company) return null;
+
+  const completedTasks =
+    company.tasks?.filter((task) => task.isCompleted).length || 0;
+
+  return (
+    <AppLayout>
+      <PageHeader
+        eyebrow="Company Preparation"
+        title={company.companyName}
+        description={company.targetRole}
+        icon={Building2}
+        backPath="/companies"
+        backLabel="Back to companies"
+      />
+
+      <SectionCard className="mb-8">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <InfoBox label="Type" value={company.companyType} />
+          <InfoBox label="Priority" value={company.priority} />
+          <InfoBox label="Status" value={company.applicationStatus} />
+          <InfoBox
+            label="Tasks"
+            value={`${completedTasks}/${company.tasks?.length || 0}`}
+          />
+        </div>
+
+        <div className="mt-6">
+          <div className="mb-2 flex justify-between text-sm">
+            <span className="text-slate-400">Preparation Progress</span>
+            <span className="text-slate-300">
+              {company.progressPercentage || 0}%
+            </span>
+          </div>
+
+          <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full bg-blue-600"
+              style={{ width: `${company.progressPercentage || 0}%` }}
+            />
+          </div>
+        </div>
+      </SectionCard>
+
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <SectionCard
+          title="Preparation Tasks"
+          description="Click a task to mark it complete or incomplete."
+          icon={CheckCircle2}
+          className="xl:col-span-2"
+        >
+          {company.tasks?.length > 0 ? (
+            <div className="space-y-3">
+              {company.tasks.map((task) => (
+                <button
+                  key={task._id}
+                  onClick={() => handleToggleTask(task._id)}
+                  disabled={togglingTaskId === task._id}
+                  className="flex w-full items-start gap-3 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left hover:border-blue-500/50 disabled:opacity-70"
+                >
+                  {task.isCompleted ? (
+                    <CheckCircle2 className="mt-1 shrink-0 text-green-300" />
+                  ) : (
+                    <Circle className="mt-1 shrink-0 text-slate-500" />
+                  )}
+
+                  <div>
+                    <h3
+                      className={`font-semibold ${
+                        task.isCompleted
+                          ? "text-slate-500 line-through"
+                          : "text-slate-200"
+                      }`}
+                    >
+                      {task.title}
+                    </h3>
+
+                    <p className="mt-1 text-sm capitalize text-slate-500">
+                      {task.category}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl bg-slate-950 p-8 text-center text-slate-400">
+              No tasks added for this company.
+            </div>
+          )}
+        </SectionCard>
+
+        <aside className="space-y-5">
+          <SectionCard
+            title="Update Status"
+            description="Update priority, application status, and notes."
+            icon={Save}
+          >
+            <div className="space-y-4">
+              <Select
+                label="Priority"
+                name="priority"
+                value={editData.priority}
+                onChange={handleEditChange}
+                options={[
+                  ["high", "High"],
+                  ["medium", "Medium"],
+                  ["low", "Low"],
+                ]}
+              />
+
+              <Select
+                label="Application Status"
+                name="applicationStatus"
+                value={editData.applicationStatus}
+                onChange={handleEditChange}
+                options={[
+                  ["not_applied", "Not Applied"],
+                  ["applied", "Applied"],
+                  ["shortlisted", "Shortlisted"],
+                  ["interviewing", "Interviewing"],
+                  ["offered", "Offered"],
+                  ["rejected", "Rejected"],
+                ]}
+              />
+
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">
+                  Notes
+                </label>
+
+                <textarea
+                  name="notes"
+                  value={editData.notes}
+                  onChange={handleEditChange}
+                  rows={5}
+                  placeholder="Add important notes for this company..."
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-700 disabled:opacity-70"
+              >
+                <Save size={18} />
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Preparation Focus"
+            description="Main focus areas for this company."
+            icon={Building2}
+          >
+            <div className="flex flex-wrap gap-2">
+              {company.preparationFocus?.length > 0 ? (
+                company.preparationFocus.map((focus) => (
+                  <span
+                    key={focus}
+                    className="rounded-full bg-blue-500/10 px-3 py-1 text-sm text-blue-300"
+                  >
+                    {focus}
+                  </span>
+                ))
+              ) : (
+                <p className="text-sm text-slate-400">No focus added.</p>
+              )}
+            </div>
+          </SectionCard>
+        </aside>
+      </section>
+    </AppLayout>
+  );
+};
+
+const InfoBox = ({ label, value }) => {
+  return (
+    <div className="rounded-xl bg-slate-950 p-4">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 font-semibold capitalize">
+        {String(value || "N/A").replace("_", " ")}
+      </p>
+    </div>
+  );
+};
+
+const Select = ({ label, options, ...props }) => {
+  return (
+    <div>
+      <label className="mb-2 block text-sm text-slate-300">{label}</label>
+
+      <select
+        {...props}
+        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+      >
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
+
+export default CompanyDetails;
